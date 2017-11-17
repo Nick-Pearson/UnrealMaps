@@ -1,0 +1,25 @@
+{
+	"FileVersion" : 3,
+	"Version" : 1,
+	"VersionName" : "1.0",
+	"FriendlyName" : "Unreal Maps",
+	"Description" : "Unreal Engine plugin to allow use of Google Maps as a UI element",
+	"Category" : "UI",
+	"CreatedBy" : "Nick Pearson",
+	"CreatedByURL" : "http://epicgames.com",
+	"DocsURL" : "",
+	"MarketplaceURL" : "",
+	"SupportURL" : "",
+	"EnabledByDefault" : false,
+	"CanContainContent" : false,
+	"IsBetaVersion" : true,
+	"Installed" : false,
+	"Modules" :
+	[
+		{
+			"Name" : "UnrealMaps",
+			"Type" : "Developer",
+			"LoadingPhase" : "Default"
+		}
+	]
+}
