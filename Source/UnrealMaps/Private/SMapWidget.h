@@ -10,7 +10,7 @@ struct FMapLocation;
 class IMapProvider;
 class UCanvas;
 class UMapCanvasRenderTarget2D;
-class SImage;
+class SMapCanvasContainer;
 
 class SMapWidget : public IMapWidget
 {
@@ -26,9 +26,11 @@ public:
 
 	virtual void GetLocation(FMapLocation& Location) const override;
 	
-	FORCEINLINE void InvalidateMapDisplay() { bRequiresUpdate = true; }
+	FORCEINLINE void InvalidateMapDisplay() { bRequiresUpdate = true; Invalidate(EInvalidateWidget::LayoutAndVolatility); }
 	
 	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
+
+	virtual FReply OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 
 private:
 
@@ -36,11 +38,15 @@ private:
 
 	void CanvasRenderUpdate(UCanvas* Canvas, int32 Width, int32 Height);
 
+	void ResizeCanvas(int32 NewWidth, int32 NewHeight);
+
+
 private:
 	FMapLocation CurrentLocation;
-	int32 CurrentScale = 10;
+	int32 CurrentScale = 3;
+	EMapDisplayType DisplayType;
 
-	TSharedPtr<SImage> MapCanvasContainer;
+	TSharedPtr<SMapCanvasContainer> MapCanvasContainer;
 	UMapCanvasRenderTarget2D* RenderCanvas;
 	FSlateBrush CanvasBrush;
 

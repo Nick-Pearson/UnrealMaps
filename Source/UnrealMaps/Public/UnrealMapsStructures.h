@@ -27,6 +27,8 @@ struct UNREALMAPS_API FMapLocation
 	{
 		Lat += other.Lat;
 		Long += other.Long;
+		Lat = FMath::Fmod(Lat, 360.0f);
+		Long = FMath::Fmod(Long, 360.0f);
 	}
 
 	FMapLocation operator+(const FMapLocation& other)

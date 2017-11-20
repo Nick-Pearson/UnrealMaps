@@ -4,13 +4,14 @@
 #include "IHttpRequest.h"
 #include "IMapProvider.h"
 
+class IHttpResponse;
+class FMapsCacheManager;
+
 struct FLoadedMapTile
 {
 	FMapTileDefinition Tile;
 	TWeakObjectPtr<UTexture2D> Texture;
 };
-
-class IHttpResponse;
 
 struct FPendingTileReq
 {
@@ -24,6 +25,7 @@ class FGoogleMapProvider : public IMapProvider, public TSharedFromThis<FGoogleMa
 
 public:
 
+	FGoogleMapProvider();
 	virtual ~FGoogleMapProvider() {};
 
 	/* IMapProvider */
@@ -32,6 +34,8 @@ public:
 	void LoadTile(const FMapTileDefinition& Tile, const FOnTileLoadedEvent::FDelegate& OnTileLoaded) override;
 
 	UTexture2D* GetTileTexture(const FMapTileDefinition& Tile) const override;
+
+	void FlushRequests() override;
 
 private:
 
@@ -50,5 +54,5 @@ private:
 	TArray<FPendingTileReq> PendingMapTiles;
 	TArray<FLoadedMapTile> LoadedMapTiles;
 
-	EMapDisplayType MapDisplayType;
+	TSharedPtr<FMapsCacheManager> CacheManager;
 };

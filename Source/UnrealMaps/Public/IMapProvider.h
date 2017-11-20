@@ -5,16 +5,23 @@
 struct UNREALMAPS_API FMapTileDefinition
 {
 	FMapTileDefinition() {}
-	FMapTileDefinition(const FMapLocation& inCenter, int32 inZoomLevel) :
-		Center(inCenter), ZoomLevel(inZoomLevel)
+	FMapTileDefinition(const FMapLocation& inCenter, int32 inZoomLevel, int32 inTileSize, EMapDisplayType inDisplayType) :
+		Center(inCenter), ZoomLevel(inZoomLevel), TileSize(inTileSize), DisplayType(inDisplayType)
 	{}
 
 	FMapLocation Center;
 	int32 ZoomLevel = 3;
+	int32 TileSize = 500;
+	EMapDisplayType DisplayType = EMapDisplayType::Roadmap;
 
 	bool operator==(const FMapTileDefinition& other) const
 	{
-		return other.ZoomLevel == ZoomLevel && other.Center == Center;
+		return other.ZoomLevel == ZoomLevel && other.Center == Center && other.TileSize == TileSize && other.DisplayType == DisplayType;
+	}
+
+	FString GetCacheKey() const
+	{
+		return FString::Printf(TEXT("%.1f.%.1f.%d.%d.%d"), Center.Lat, Center.Long, ZoomLevel, TileSize, (int32)DisplayType);
 	}
 };
 
@@ -30,4 +37,6 @@ public:
 	virtual void LoadTile(const FMapTileDefinition& Tile, const FOnTileLoadedEvent::FDelegate& OnTileLoaded) PURE_VIRTUAL(LoadTile, );
 
 	virtual UTexture2D* GetTileTexture(const FMapTileDefinition& Tile) const PURE_VIRTUAL(GetTileTexture, return nullptr;);
+
+	virtual void FlushRequests() PURE_VIRTUAL(FlushRequests, );
 };

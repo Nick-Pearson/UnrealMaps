@@ -11,7 +11,7 @@ class UUnrealMapsSettings : public UObject
 	
 public:
 
-	UPROPERTY(config, EditAnywhere, Category = "General")
+	UPROPERTY(config, EditAnywhere, Category = "General", meta = (ClampMin = 64))
 	int32 TileSize = 500;
 
 	UPROPERTY(config, EditAnywhere, Category = "General|Cache")

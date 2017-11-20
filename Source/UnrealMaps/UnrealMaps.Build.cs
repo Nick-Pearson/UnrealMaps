@@ -14,8 +14,8 @@ namespace UnrealBuildTool.Rules
 
             PrivateDependencyModuleNames.AddRange(new string[] {
                 "CoreUObject",
-                "Engine",
                 "HTTP",
+                "Engine",
                 "ImageWrapper"
             });
 		}

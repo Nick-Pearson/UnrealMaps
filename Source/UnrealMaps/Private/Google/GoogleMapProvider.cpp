@@ -1,5 +1,7 @@
 #include "GoogleMapProvider.h"
 #include "../UnrealMapsSettings.h"
+#include "../MapsCacheManager.h"
+#include "../UnrealMapsHelperFunctions.h"
 
 #include "HttpModule.h"
 #include "IHttpResponse.h"
@@ -7,6 +9,11 @@
 #include "ModuleManager.h"
 #include "IImageWrapper.h"
 #include "Engine/Texture2D.h"
+
+FGoogleMapProvider::FGoogleMapProvider()
+{
+	CacheManager = FMapsCacheManager::Get();
+}
 
 void FGoogleMapProvider::GetTileSize(int32 InScale, FMapLocation& outTileSize) const
 {
@@ -16,28 +23,46 @@ void FGoogleMapProvider::GetTileSize(int32 InScale, FMapLocation& outTileSize) c
 	switch (InScale)
 	{
 	case 1:
+		LatVal = 180.0f;
+		LongVal = 360.0f;
 		break;
 	case 2:
+		LatVal = 90.0f;
+		LongVal = 180.0f;
 		break;
 	case 3:
+		LatVal = 66.4f;
+		LongVal = 90.0f;
 		break;
-	case 4:
+	case 4: //22.5
+		LongVal = 45.0f;
 		break;
-	case 5:
+	case 5: //11.25
+		LongVal = 22.5;
 		break;
-	case 6:
+	case 6: //5.625
+		LatVal = 6.900;
+		LongVal = 11.25f;
 		break;
 	case 7:
+		LatVal = 3.520f;
+		LongVal = 5.2f;
 		break;
 	case 8:
+		LatVal = 1.760f;
+		LongVal = 2.8f;
 		break;
 	case 9:
+		LatVal = 0.880f;
+		LongVal = 1.4f;
 		break;
 	case 10:
+		LatVal = 0.440f;
 		LongVal = 0.7f;
-		LatVal = 0.425f;
 		break;
 	case 11:
+		LatVal = 0.220f;
+		LongVal = 0.35f;
 		break;
 	case 12:
 		break;
@@ -51,6 +76,18 @@ void FGoogleMapProvider::GetTileSize(int32 InScale, FMapLocation& outTileSize) c
 void FGoogleMapProvider::LoadTile(const FMapTileDefinition& Tile, const FOnTileLoadedEvent::FDelegate& OnTileLoaded)
 {
 	UTexture2D* LoadedTile = GetTileTexture(Tile);
+	
+	if (!LoadedTile)
+	{
+		LoadedTile = CacheManager->LoadFromCache(Tile.GetCacheKey());
+
+		if (LoadedTile)
+		{
+			FLoadedMapTile* LoadedTilePtr = &LoadedMapTiles[LoadedMapTiles.AddDefaulted()];
+			LoadedTilePtr->Tile = Tile;
+			LoadedTilePtr->Texture = LoadedTile;
+		}
+	}
 
 	if (LoadedTile)
 	{
@@ -72,6 +109,17 @@ UTexture2D* FGoogleMapProvider::GetTileTexture(const FMapTileDefinition& Tile) c
 
 	if (LoadedTile) return LoadedTile->Texture.Get();
 	return nullptr;
+}
+
+void FGoogleMapProvider::FlushRequests()
+{
+	for (FPendingTileReq& PendingReq : PendingMapTiles)
+	{
+		if(PendingReq.HttpRequest.IsValid())
+			PendingReq.HttpRequest->CancelRequest();
+	}
+
+	PendingMapTiles.Empty();
 }
 
 FPendingTileReq* FGoogleMapProvider::FindOrAddAPIRequest(const FMapTileDefinition& Tile)
@@ -111,8 +159,8 @@ FString FGoogleMapProvider::GetRequestURL(const FMapTileDefinition& Tile) const
 		Tile.Center.Lat,
 		Tile.Center.Long,
 		Tile.ZoomLevel,
-		Settings->TileSize, Settings->TileSize,
-		*GetMapTypeString(MapDisplayType),
+		Tile.TileSize, Tile.TileSize,
+		*GetMapTypeString(Tile.DisplayType),
 		*Settings->Google_API_Key);
 }
 
@@ -147,14 +195,14 @@ void FGoogleMapProvider::CompactLoadedMapTiles()
 	}
 }
 
-void FGoogleMapProvider::OnPendingRequestComplete(FHttpRequestPtr ReqPtr, FHttpResponsePtr Response,bool Success)
+void FGoogleMapProvider::OnPendingRequestComplete(FHttpRequestPtr ReqPtr, FHttpResponsePtr Response, bool Success)
 {
-	FPendingTileReq* PendingReqPtr = PendingMapTiles.FindByPredicate([&](const FPendingTileReq& PendingReq) {
+	int32 PendingReqIdx = PendingMapTiles.FindLastByPredicate([&](const FPendingTileReq& PendingReq) {
 		return PendingReq.HttpRequest == ReqPtr;
 	});
 
 	// check if the response is valid
-	if (!PendingReqPtr)
+	if (PendingReqIdx == INDEX_NONE)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Failed to find pending request for recieved response"));
 		return;
@@ -180,44 +228,20 @@ void FGoogleMapProvider::OnPendingRequestComplete(FHttpRequestPtr ReqPtr, FHttpR
 		return;
 	}
 
-	TSharedPtr<IImageWrapper> ImageWrapper = FModuleManager::LoadModuleChecked<IImageWrapperModule>("ImageWrapper").CreateImageWrapper(RecievedFormat);
+	TSharedPtr<IImageWrapper> ImageWrapper;
+	UTexture2D* NewTexture = UnrealMapsHelperFunctions::CreateTexture2DFromBytes(Response->GetContent(), RecievedFormat, ImageWrapper);
 
-	if (!ImageWrapper.IsValid())
-		return;
-
-	// Load the raw HTML bytes into an image wrapper
-	TArray<uint8> ResponseBytes = Response->GetContent();
-	ImageWrapper->SetCompressed(ResponseBytes.GetData(), ResponseBytes.Num());
-
-	const TArray<uint8>* DataPtr = nullptr;
-	ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, DataPtr);
-
-	if (!DataPtr)
+	if (NewTexture)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to decompress image"));
-		return;
+		CacheManager->SaveToCache(PendingMapTiles[PendingReqIdx].Tile.GetCacheKey(), ImageWrapper);
+
+		//create a loaded tile record
+		FLoadedMapTile* LoadedTilePtr = &LoadedMapTiles[LoadedMapTiles.AddDefaulted()];
+		LoadedTilePtr->Texture = NewTexture;
+		LoadedTilePtr->Tile = PendingMapTiles[PendingReqIdx].Tile;
+
+		PendingMapTiles[PendingReqIdx].LoadedEvent.Broadcast();
 	}
 
-	//create a UTexture2D container
-	UTexture2D* NewTexture = UTexture2D::CreateTransient(ImageWrapper->GetWidth(), ImageWrapper->GetHeight());
-	
-	FTexture2DMipMap& MipData = NewTexture->PlatformData->Mips[0];
-	MipData.SizeX = ImageWrapper->GetWidth();
-	MipData.SizeY = ImageWrapper->GetHeight();
-
-	// memcpy the mip data
-	void* TextureDataPtr = MipData.BulkData.Lock(EBulkDataLockFlags::LOCK_READ_WRITE);
-
-	FMemory::Memcpy(TextureDataPtr, (void*)(DataPtr->GetData()), DataPtr->Num());
-
-	MipData.BulkData.Unlock();
-
-	NewTexture->UpdateResource();
-	
-	//create a loaded tile record
-	FLoadedMapTile* LoadedTilePtr = &LoadedMapTiles[LoadedMapTiles.AddDefaulted()];
-	LoadedTilePtr->Texture = NewTexture;
-	LoadedTilePtr->Tile = PendingReqPtr->Tile;
-
-	PendingReqPtr->LoadedEvent.Broadcast();
+	PendingMapTiles.RemoveAtSwap(PendingReqIdx);
 }
