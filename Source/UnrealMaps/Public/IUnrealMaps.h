@@ -1,8 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Modules/ModuleInterface.h"
-#include "Modules/ModuleManager.h"
+#include "ModuleInterface.h"
+#include "ModuleManager.h"
+
+class IMapWidget;
+class IMapProvider;
+struct FMapWidgetParams;
+struct FMapLocation;
 
 class IUnrealMaps : public IModuleInterface
 {
@@ -29,5 +34,9 @@ public:
 	{
 		return FModuleManager::Get().IsModuleLoaded( "UnrealMaps" );
 	}
+
+	virtual TSharedPtr<IMapWidget> CreateMapWidget(const FMapWidgetParams& Params, const FMapLocation& InitialLocation) const PURE_VIRTUAL(CreateMapWidget, return nullptr;);
+
+	virtual TSharedPtr<IMapProvider> CreateMapProvder() const PURE_VIRTUAL(CreateMapProvder, return nullptr;);
 };
 
