@@ -7,6 +7,8 @@
 #include "ISettingsModule.h"
 #include "ISettingsSection.h"
 
+DEFINE_LOG_CATEGORY(UnrealMaps);
+
 #define LOCTEXT_NAMESPACE "UnrealMaps"
 
 class FUnrealMaps : public IUnrealMaps
@@ -54,7 +56,7 @@ void FUnrealMaps::ShutdownModule()
 TSharedPtr<IMapWidget> FUnrealMaps::CreateMapWidget(const FMapWidgetParams& Params, const FMapLocation& InitialLocation) const
 {
 	TSharedPtr<SMapWidget> Widget;
-	SAssignNew(Widget, SMapWidget);
+	SAssignNew(Widget, SMapWidget).inParams(Params);
 
 	Widget->SetLocation(InitialLocation);
 

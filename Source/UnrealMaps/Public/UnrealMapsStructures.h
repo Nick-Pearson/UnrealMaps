@@ -41,5 +41,6 @@ struct UNREALMAPS_API FMapLocation
 
 struct UNREALMAPS_API FMapWidgetParams
 {
+	bool bUseTiles = false;
 	EMapDisplayType DisplayType = EMapDisplayType::Roadmap;
 };

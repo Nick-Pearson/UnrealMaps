@@ -2,6 +2,7 @@
 #include "../UnrealMapsSettings.h"
 #include "../MapsCacheManager.h"
 #include "../UnrealMapsHelperFunctions.h"
+#include "IUnrealMaps.h"
 
 #include "HttpModule.h"
 #include "IHttpResponse.h"
@@ -34,40 +35,34 @@ void FGoogleMapProvider::GetTileSize(int32 InScale, FMapLocation& outTileSize) c
 		LatVal = 66.4f;
 		LongVal = 90.0f;
 		break;
-	case 4: //22.5
+	case 4:
+		LatVal = 33.2f;
 		LongVal = 45.0f;
 		break;
-	case 5: //11.25
+	case 5:
+		LatVal = 12.45f;
 		LongVal = 22.5;
 		break;
-	case 6: //5.625
-		LatVal = 6.900;
+	case 6:
+		LatVal = 6.9f;
 		LongVal = 11.25f;
 		break;
 	case 7:
 		LatVal = 3.520f;
-		LongVal = 5.2f;
+		LongVal = 5.625f;
 		break;
-	case 8:
-		LatVal = 1.760f;
-		LongVal = 2.8f;
-		break;
-	case 9:
-		LatVal = 0.880f;
-		LongVal = 1.4f;
-		break;
-	case 10:
-		LatVal = 0.440f;
-		LongVal = 0.7f;
-		break;
-	case 11:
-		LatVal = 0.220f;
-		LongVal = 0.35f;
-		break;
-	case 12:
-		break;
-	case 13:
-		break;
+	}
+
+	if (InScale > 12)
+	{
+		LatVal = 3.510f / (2 << (InScale - 8));
+		LongVal = 5.625f / (2 << (InScale - 8));
+	}
+
+	if (InScale > 7)
+	{
+		LatVal = 3.510f / (2 << (InScale - 8));
+		LongVal = 5.625f / (2 << (InScale - 8));
 	}
 
 	outTileSize = FMapLocation(LatVal, LongVal);
@@ -159,7 +154,7 @@ FString FGoogleMapProvider::GetRequestURL(const FMapTileDefinition& Tile) const
 		Tile.Center.Lat,
 		Tile.Center.Long,
 		Tile.ZoomLevel,
-		Tile.TileSize, Tile.TileSize,
+		Tile.TileSize.X, Tile.TileSize.Y,
 		*GetMapTypeString(Tile.DisplayType),
 		*Settings->Google_API_Key);
 }
@@ -204,13 +199,13 @@ void FGoogleMapProvider::OnPendingRequestComplete(FHttpRequestPtr ReqPtr, FHttpR
 	// check if the response is valid
 	if (PendingReqIdx == INDEX_NONE)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to find pending request for recieved response"));
+		UE_LOG(UnrealMaps, Warning, TEXT("Failed to find pending request for recieved response"));
 		return;
 	}
 
 	if (ReqPtr->GetStatus() != EHttpRequestStatus::Succeeded || !Response.IsValid() || Response->GetResponseCode() != 200)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("HTTP Request failed"));
+		UE_LOG(UnrealMaps, Warning, TEXT("HTTP Request failed"));
 		return;
 	}
 
@@ -224,7 +219,7 @@ void FGoogleMapProvider::OnPendingRequestComplete(FHttpRequestPtr ReqPtr, FHttpR
 		RecievedFormat = EImageFormat::JPEG;
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Unsupported image format"));
+		UE_LOG(UnrealMaps, Warning, TEXT("Unsupported image format"));
 		return;
 	}
 

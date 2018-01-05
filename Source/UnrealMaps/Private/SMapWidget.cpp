@@ -6,15 +6,22 @@
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
 
-void SMapWidget::Construct(const FArguments& InArgs)
+void SMapWidget::Construct(const SMapWidget::FArguments& InArgs)
 {	
+	Params = InArgs._inParams;
+
 	MapProvider = IUnrealMaps::Get().CreateMapProvder();
 
 	RenderCanvas = NewObject<UMapCanvasRenderTarget2D>();
 	RenderCanvas->SizeX = 500;
 	RenderCanvas->SizeY = 500;
 	RenderCanvas->ClearColor = FLinearColor::Black;
-	RenderCanvas->PassthroughEvent.AddSP(this, &SMapWidget::CanvasRenderUpdate);
+
+	if(Params.bUseTiles)
+		RenderCanvas->PassthroughEvent.AddSP(this, &SMapWidget::CanvasRenderUpdate_Tiled);
+	else
+		RenderCanvas->PassthroughEvent.AddSP(this, &SMapWidget::CanvasRenderUpdate_Full);
+
 
 	CanvasBrush.ImageSize = FVector2D(500, 500);
 	CanvasBrush.SetResourceObject(RenderCanvas);
@@ -44,6 +51,21 @@ void SMapWidget::GetLocation(FMapLocation& Location) const
 	Location = CurrentLocation;
 }
 
+void SMapWidget::SetMapScale(int32 NewScale)
+{
+	NewScale = FMath::Clamp(NewScale, 1, 20);
+
+	if (CurrentScale == NewScale) return;
+
+	CurrentScale = NewScale;
+	InvalidateMapDisplay();
+}
+
+int32 SMapWidget::GetMapScale() const
+{
+	return CurrentScale;
+}
+
 int32 SMapWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
 {
 	if (bRequiresUpdate) UpdateMapDisplay();
@@ -54,9 +76,7 @@ int32 SMapWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeome
 FReply SMapWidget::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	int32 Change = MouseEvent.GetWheelDelta() > 0 ? 1 : -1;
-	CurrentScale += Change;
-	CurrentScale = FMath::Clamp(CurrentScale, 1, 20);
-	InvalidateMapDisplay();
+	SetMapScale(CurrentScale + Change);
 
 	return FReply::Handled();
 }
@@ -66,11 +86,12 @@ void SMapWidget::UpdateMapDisplay() const
 	if (!RenderCanvas || !MapProvider.IsValid())
 		return;
 
-	RenderCanvas->UpdateResource();
 	bRequiresUpdate = false;
+	RenderCanvas->UpdateResource();
 }
 
-void SMapWidget::CanvasRenderUpdate(UCanvas* Canvas, int32 Width, int32 Height)
+
+void SMapWidget::CanvasRenderUpdate_Tiled(UCanvas* Canvas, int32 Width, int32 Height)
 {
 	const UUnrealMapsSettings* Settings = GetDefault<UUnrealMapsSettings>();
 
@@ -80,9 +101,11 @@ void SMapWidget::CanvasRenderUpdate(UCanvas* Canvas, int32 Width, int32 Height)
 	FMapLocation Size;
 	MapProvider->GetTileSize(CurrentScale, Size);
 
+	FMapLocation CurrLoc = GetCurrentLocationScaled();
+
 	//clamp requested images to a grid space to assist caching of images
-	FMapLocation BaseLocation(FMath::CeilToFloat(CurrentLocation.Lat / Size.Lat) * Size.Lat, FMath::FloorToFloat(CurrentLocation.Long / Size.Long) * Size.Long);
-	FVector2D BaseLocationOffset((CurrentLocation.Long - BaseLocation.Long) / Size.Long, (CurrentLocation.Lat - BaseLocation.Lat) / Size.Lat);
+	FMapLocation BaseLocation(FMath::CeilToFloat(CurrLoc.Lat / Size.Lat) * Size.Lat, FMath::FloorToFloat(CurrLoc.Long / Size.Long) * Size.Long);
+	FVector2D BaseLocationOffset((CurrLoc.Long - BaseLocation.Long) / Size.Long, (CurrLoc.Lat - BaseLocation.Lat) / Size.Lat);
 	BaseLocationOffset *= Settings->TileSize;
 
 	//calc how many tiles fit into a screen
@@ -94,7 +117,7 @@ void SMapWidget::CanvasRenderUpdate(UCanvas* Canvas, int32 Width, int32 Height)
 	{
 		for (int32 y = -ScreenTileRadiusY; y <= ScreenTileRadiusY; ++y)
 		{
-			FMapTileDefinition RequiredMapTile = FMapTileDefinition(BaseLocation + FMapLocation(Size.Lat * -y, Size.Long * x), CurrentScale, Settings->TileSize, DisplayType);
+			FMapTileDefinition RequiredMapTile = FMapTileDefinition(BaseLocation + FMapLocation(Size.Lat * -y, Size.Long * x), CurrentScale, Settings->TileSize, Params.DisplayType);
 			UTexture2D* TileTexture = MapProvider->GetTileTexture(RequiredMapTile);
 
 			if (!TileTexture)
@@ -110,6 +133,39 @@ void SMapWidget::CanvasRenderUpdate(UCanvas* Canvas, int32 Width, int32 Height)
 			NewItem.Draw(Canvas->Canvas);
 		}
 	}
+}
+
+void SMapWidget::CanvasRenderUpdate_Full(UCanvas* Canvas, int32 Width, int32 Height)
+{
+	if (!ensure(Canvas) || !ensure(MapProvider.IsValid()))
+		return;
+
+	FMapLocation CurrLoc = GetCurrentLocationScaled();
+
+	FMapTileDefinition RequiredTexture = FMapTileDefinition(CurrLoc, CurrentScale, FIntPoint((int32)CanvasBrush.ImageSize.X, (int32)CanvasBrush.ImageSize.Y), Params.DisplayType);
+	UTexture2D* LoadedTexture = MapProvider->GetTileTexture(RequiredTexture);
+
+	if (!LoadedTexture)
+	{
+		MapProvider->LoadTile(RequiredTexture, FOnTileLoadedEvent::FDelegate::CreateSP(this, &SMapWidget::InvalidateMapDisplay));
+		return;
+	}
+
+	FCanvasTileItem NewItem(FVector2D(0.0f, 0.0f), LoadedTexture->Resource, FLinearColor::White);
+	NewItem.Draw(Canvas->Canvas);
+}
+
+FMapLocation SMapWidget::GetCurrentLocationScaled() const
+{
+	FMapLocation CurrLoc = CurrentLocation;
+
+	//blend to 0,0 as we zoom out
+	if (CurrentScale <= 5.0f)
+	{
+		const float ScaleFactor = FMath::Clamp((CurrentScale - 3.0f) / 2.0f, 0.0f, 1.0f);
+		CurrLoc = FMapLocation(CurrLoc.Lat * ScaleFactor, CurrLoc.Long * ScaleFactor);
+	}
+	return CurrLoc;
 }
 
 void SMapWidget::ResizeCanvas(int32 NewWidth, int32 NewHeight)

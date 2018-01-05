@@ -9,6 +9,8 @@ class IMapProvider;
 struct FMapWidgetParams;
 struct FMapLocation;
 
+DECLARE_LOG_CATEGORY_EXTERN(UnrealMaps, Log, All);
+
 class IUnrealMaps : public IModuleInterface
 {
 

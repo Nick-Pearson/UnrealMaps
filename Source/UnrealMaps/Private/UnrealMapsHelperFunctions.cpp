@@ -18,7 +18,7 @@ UTexture2D* UnrealMapsHelperFunctions::CreateTexture2DFromBytes(const TArray<uin
 
 	if (!DataPtr)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to decompress image"));
+		UE_LOG(UnrealMaps, Warning, TEXT("Failed to decompress image"));
 		return nullptr;
 	}
 

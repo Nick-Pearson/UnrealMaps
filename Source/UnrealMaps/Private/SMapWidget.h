@@ -18,13 +18,17 @@ public:
 
 	SLATE_BEGIN_ARGS(SMapWidget)
 	{}
+	SLATE_ARGUMENT(FMapWidgetParams, inParams)
 	SLATE_END_ARGS()
 
 	void Construct(const SMapWidget::FArguments& InArgs);
 
+	// IMapWidget
 	virtual void SetLocation(const FMapLocation& Location) override;
-
 	virtual void GetLocation(FMapLocation& Location) const override;
+
+	virtual void SetMapScale(int32 NewScale) override;
+	virtual int32 GetMapScale() const override;
 	
 	FORCEINLINE void InvalidateMapDisplay() { bRequiresUpdate = true; Invalidate(EInvalidateWidget::LayoutAndVolatility); }
 	
@@ -32,19 +36,23 @@ public:
 
 	virtual FReply OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 
+
 private:
 
 	void UpdateMapDisplay() const;
 
-	void CanvasRenderUpdate(UCanvas* Canvas, int32 Width, int32 Height);
+	void CanvasRenderUpdate_Tiled(UCanvas* Canvas, int32 Width, int32 Height);
+	void CanvasRenderUpdate_Full(UCanvas* Canvas, int32 Width, int32 Height);
+
+	FMapLocation GetCurrentLocationScaled() const;
 
 	void ResizeCanvas(int32 NewWidth, int32 NewHeight);
 
-
 private:
+	FMapWidgetParams Params;
+
 	FMapLocation CurrentLocation;
 	int32 CurrentScale = 3;
-	EMapDisplayType DisplayType;
 
 	TSharedPtr<SMapCanvasContainer> MapCanvasContainer;
 	UMapCanvasRenderTarget2D* RenderCanvas;
