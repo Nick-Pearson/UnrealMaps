@@ -32,7 +32,11 @@ private:
 	FORCEINLINE FString GetCachePath(const FString& Filename) const { return GetCachePath() / Filename + GetCacheExtension(); }
 	FORCEINLINE FString GetCacheExtension() const { return ".umcache"; }
 
+	//removes cache entries until it fits the requested target
+	void ReduceCacheToFit(int32 TargetCacheSize);
 private:
 
-	TSet<FString> CacheExistanceMap;
+	// size of the cache in MB
+	double CurrentCacheSize = 0.0f;
+	TArray<FString> CacheExistanceMap;
 };

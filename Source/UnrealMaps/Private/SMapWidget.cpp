@@ -6,6 +6,11 @@
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
 
+namespace
+{
+	const FText Text_Loading = NSLOCTEXT("UnrealMaps", "Loading", "Loading...");
+};
+
 void SMapWidget::Construct(const SMapWidget::FArguments& InArgs)
 {	
 	Params = InArgs._inParams;
@@ -119,18 +124,21 @@ void SMapWidget::CanvasRenderUpdate_Tiled(UCanvas* Canvas, int32 Width, int32 He
 		{
 			FMapTileDefinition RequiredMapTile = FMapTileDefinition(BaseLocation + FMapLocation(Size.Lat * -y, Size.Long * x), CurrentScale, Settings->TileSize, Params.DisplayType);
 			UTexture2D* TileTexture = MapProvider->GetTileTexture(RequiredMapTile);
+			FVector2D TileScreenLocation(ScreenCenter.X - (Settings->TileSize * 0.5f) + (Settings->TileSize * x) - BaseLocationOffset.X,
+				ScreenCenter.Y - (Settings->TileSize * 0.5f) + (Settings->TileSize * y) + BaseLocationOffset.Y);
 
 			if (!TileTexture)
 			{
 				MapProvider->LoadTile(RequiredMapTile, FOnTileLoadedEvent::FDelegate::CreateSP(this, &SMapWidget::InvalidateMapDisplay));
-				continue;
+
+				FCanvasTextItem NewItem(TileScreenLocation, Text_Loading, GEngine->GetMediumFont(), FLinearColor::White);
+				NewItem.Draw(Canvas->Canvas);
 			}
-			
-			FCanvasTileItem NewItem(
-				FVector2D(ScreenCenter.X - (Settings->TileSize * 0.5f) + (Settings->TileSize * x) - BaseLocationOffset.X,
-					ScreenCenter.Y - (Settings->TileSize * 0.5f) + (Settings->TileSize * y) + BaseLocationOffset.Y),
-				TileTexture->Resource, FLinearColor::White);
-			NewItem.Draw(Canvas->Canvas);
+			else
+			{
+				FCanvasTileItem NewItem(TileScreenLocation, TileTexture->Resource, FLinearColor::White);
+				NewItem.Draw(Canvas->Canvas);
+			}
 		}
 	}
 }
@@ -148,11 +156,15 @@ void SMapWidget::CanvasRenderUpdate_Full(UCanvas* Canvas, int32 Width, int32 Hei
 	if (!LoadedTexture)
 	{
 		MapProvider->LoadTile(RequiredTexture, FOnTileLoadedEvent::FDelegate::CreateSP(this, &SMapWidget::InvalidateMapDisplay));
-		return;
-	}
 
-	FCanvasTileItem NewItem(FVector2D(0.0f, 0.0f), LoadedTexture->Resource, FLinearColor::White);
-	NewItem.Draw(Canvas->Canvas);
+		FCanvasTextItem NewItem(FVector2D(0.0f, 0.0f), Text_Loading, GEngine->GetMediumFont(), FLinearColor::White);
+		NewItem.Draw(Canvas->Canvas);
+	}
+	else
+	{
+		FCanvasTileItem NewItem(FVector2D(0.0f, 0.0f), LoadedTexture->Resource, FLinearColor::White);
+		NewItem.Draw(Canvas->Canvas);
+	}
 }
 
 FMapLocation SMapWidget::GetCurrentLocationScaled() const

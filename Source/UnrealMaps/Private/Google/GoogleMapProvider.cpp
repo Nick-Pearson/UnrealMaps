@@ -70,16 +70,20 @@ void FGoogleMapProvider::GetTileSize(int32 InScale, FMapLocation& outTileSize) c
 
 void FGoogleMapProvider::LoadTile(const FMapTileDefinition& Tile, const FOnTileLoadedEvent::FDelegate& OnTileLoaded)
 {
-	UTexture2D* LoadedTile = GetTileTexture(Tile);
+	FMapTileDefinition Tile_cpy = Tile;
+	Tile_cpy.TileSize.X = FMath::Min(Tile_cpy.TileSize.X, 640);
+	Tile_cpy.TileSize.Y = FMath::Min(Tile_cpy.TileSize.Y, 640);
+
+	UTexture2D* LoadedTile = GetTileTexture(Tile_cpy);
 	
 	if (!LoadedTile)
 	{
-		LoadedTile = CacheManager->LoadFromCache(Tile.GetCacheKey());
+		LoadedTile = CacheManager->LoadFromCache(Tile_cpy.GetCacheKey());
 
 		if (LoadedTile)
 		{
 			FLoadedMapTile* LoadedTilePtr = &LoadedMapTiles[LoadedMapTiles.AddDefaulted()];
-			LoadedTilePtr->Tile = Tile;
+			LoadedTilePtr->Tile = Tile_cpy;
 			LoadedTilePtr->Texture = LoadedTile;
 		}
 	}
@@ -90,7 +94,7 @@ void FGoogleMapProvider::LoadTile(const FMapTileDefinition& Tile, const FOnTileL
 		return;
 	}
 
-	FPendingTileReq* PendingReq = FindOrAddAPIRequest(Tile);
+	FPendingTileReq* PendingReq = FindOrAddAPIRequest(Tile_cpy);
 
 	if (PendingReq)
 		PendingReq->LoadedEvent.Add(OnTileLoaded);

@@ -65,10 +65,15 @@ void FMapsCacheManager::SaveToCache(const FString& CacheKey, TSharedPtr<IImageWr
 
 	const TArray<uint8> DataPtr = ImageData->GetCompressed();
 
+	CurrentCacheSize += DataPtr.Num() / 1048576.0;
+
 	FileWriter->Serialize((void*)DataPtr.GetData(), DataPtr.Num());
 	FileWriter->Close();
 
-	CacheExistanceMap.Add(CacheFilename.LeftChop(GetCacheExtension().Len()));
+	//remove any entries that put us over the limit
+	ReduceCacheToFit(Settings->MaxCacheSize);
+
+	CacheExistanceMap.Add(CacheKey);
 }
 
 void FMapsCacheManager::Initialise()
@@ -84,14 +89,37 @@ void FMapsCacheManager::Initialise()
 	TArray<FString> FoundFiles;
 	IFileManager::Get().FindFiles(FoundFiles, *CacheDir);
 
+	CurrentCacheSize = 0.0;
 	for (const FString& FoundFile : FoundFiles)
 	{
-		//chop of the .umcache extension
+		//chop off the .umcache extension
 		CacheExistanceMap.Add(FoundFile.LeftChop(GetCacheExtension().Len()));
+
+		int64 FileSize = IFileManager::Get().FileSize(*(CacheDir / FoundFile));
+		//convert bytes to megabytes
+		CurrentCacheSize += FileSize / 1048576.0;
 	}
+
+	UE_LOG(UnrealMaps, Log, TEXT("[MapsCacheManager] Initialised cache, current cache size %.2f MB"), CurrentCacheSize);
 }
 
 FString FMapsCacheManager::GetCachePath() const
 {
 	return FPaths::ProjectSavedDir() / "UnrealMaps" / "CachedImages";
+}
+
+void FMapsCacheManager::ReduceCacheToFit(int32 TargetCacheSize)
+{
+	//delete random entries until we are at the correct size
+	while (CacheExistanceMap.Num() > 0 && CurrentCacheSize > TargetCacheSize)
+	{
+		FString SelectedEntry = CacheExistanceMap[FMath::RandHelper(CacheExistanceMap.Num() - 1)];
+		
+		int64 FileSize = IFileManager::Get().FileSize(*GetCachePath(SelectedEntry));
+		//convert bytes to megabytes
+		CurrentCacheSize -= FileSize / 1048576.0;
+
+		IFileManager::Get().Delete(*GetCachePath(SelectedEntry));
+		CacheExistanceMap.Remove(SelectedEntry);
+	}
 }
